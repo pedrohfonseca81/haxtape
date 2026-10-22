@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HAXTAPE</title>
+  <link rel="stylesheet" href="style.css?v=nocache_3">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Pako (Descompressão Deflate rápida) -->
+  <script src="src/vendor/pako.min.js"></script>
+  <!-- Núcleo Determinístico Oficial do HaxBall -->
+  <script src="src/haxball-core.js?v=nocache_3"></script>
+</head>
+<body>
+  <!-- Input de arquivo invisível mas acessível para todos os labels -->
+  <input type="file" id="file-input" accept=".hbr2" style="position: fixed; top: -1000px; left: -1000px; opacity: 0;">
+
+  <div class="app-container">
+    <!-- Header Minimalista -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="logo-ball">⚽</span>
+        <h1 class="logo-title">HAX<span>TAPE</span></h1>
+      </div>
+
+      <div class="header-actions">
+        <!-- Seletor de Partidas (Multi-partidas) -->
+        <div id="match-selector-container" class="match-selector-wrapper" style="display: none;">
+          <label for="match-select">Partida:</label>
+          <select id="match-select" class="custom-select"></select>
+        </div>
+
+        <label for="file-input" class="btn btn-primary btn-sm">
+          Abrir .hbr2
+        </label>
+      </div>
+    </header>
+
+    <!-- Área Principal do Player -->
+    <main class="player-main">
+      <div class="player-wrapper" id="player-wrapper">
+        <!-- Canvas do Jogo -->
+        <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+        <!-- Dropzone de Upload (Visível quando nenhum replay está carregado) -->
+        <div id="dropzone" class="dropzone-overlay">
+          <div class="dropzone-box" id="dropzone-clickable">
+            <div class="dropzone-icon">📼</div>
+            <h2>Arraste seu replay do HaxBall aqui</h2>
+            <p>ou clique para selecionar um arquivo <code>.hbr2</code></p>
+            <div class="dropzone-actions">
+              <label for="file-input" id="btn-browse-file" class="btn btn-primary">
+                Escolher Arquivo
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indicador de Play/Pause central -->
+        <div id="play-indicator" class="play-indicator"></div>
+      </div>
+
+      <!-- Barra de Controle e Linha do Tempo de Corte -->
+      <section class="controls-panel" id="controls-panel" style="display: none;">
+        <!-- Timeline com Alças de Corte e Marcadores de Gol -->
+        <div class="timeline-container">
+          <div class="timeline-header">
+            <span class="trim-indicator">
+              Corte selecionado: <strong id="trim-duration-text">00:00 - 00:00 (0s)</strong>
+            </span>
+            <div class="timeline-shortcuts-hint">
+              Atalhos: <kbd>Espaço</kbd> Play/Pause &bull; <kbd>I</kbd> Início &bull; <kbd>O</kbd> Fim &bull; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Seek
+            </div>
+          </div>
+
+          <div class="timeline-bar" id="timeline-bar">
+            <!-- Faixa do Replay Total -->
+            <div class="timeline-track"></div>
+            <!-- Faixa Selecionada para Corte -->
+            <div class="timeline-range" id="timeline-range"></div>
+            <!-- Marcadores de Gol na Timeline -->
+            <div class="timeline-markers" id="timeline-markers"></div>
+            <!-- Agulha de Reprodução Atual (Playhead) -->
+            <div class="timeline-playhead" id="timeline-playhead"></div>
+            <!-- Alça de Início do Corte -->
+            <div class="trim-handle handle-start" id="handle-start" title="Início do corte (Pressione 'I')">
+              <span class="handle-tag">[ Início</span>
+            </div>
+            <!-- Alça de Fim do Corte -->
+            <div class="trim-handle handle-end" id="handle-end" title="Fim do corte (Pressione 'O')">
+              <span class="handle-tag">Fim ]</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controles Inferiores -->
+        <div class="controls-toolbar">
+          <div class="controls-left">
+            <!-- Play / Pause -->
+            <button id="btn-play-pause" class="btn btn-icon" title="Reproduzir / Pausar (Espaço)">
+              <span id="play-icon">▶</span>
+            </button>
+
+            <!-- Tempo Atual / Duração -->
+            <div class="time-display">
+              <span id="current-time">00:00</span> / <span id="total-time">00:00</span>
+            </div>
+
+            <!-- Velocidade de Reprodução -->
+            <div class="speed-selector">
+              <button class="btn-chip" data-speed="0.5">0.5x</button>
+              <button class="btn-chip active" data-speed="1.0">1x</button>
+              <button class="btn-chip" data-speed="2.0">2x</button>
+            </div>
+          </div>
+
+          <div class="controls-center">
+            <!-- Botões Rápidos de Marcação [ I ] e [ O ] -->
+            <button id="btn-set-in" class="btn btn-secondary btn-sm" title="Marcar Início no ponto atual (I)">
+              [ Início (I)
+            </button>
+
+            <!-- Placar da Partida no Painel -->
+            <div class="panel-scoreboard" id="panel-scoreboard" title="Placar da Partida">
+              <div class="scoreboard-team red">
+                <span class="scoreboard-score" id="panel-score-red">0</span>
+                <span class="scoreboard-name" id="panel-name-red">RED</span>
+              </div>
+              <div class="scoreboard-time" id="panel-match-time">00:00</div>
+              <div class="scoreboard-team blue">
+                <span class="scoreboard-name" id="panel-name-blue">BLUE</span>
+                <span class="scoreboard-score" id="panel-score-blue">0</span>
+              </div>
+            </div>
+
+            <button id="btn-set-out" class="btn btn-secondary btn-sm" title="Marcar Fim no ponto atual (O)">
+              Fim (O) ]
+            </button>
+          </div>
+
+          <div class="controls-right">
+            <!-- Toggle de Efeitos Sonoros -->
+            <button id="btn-toggle-audio" class="btn btn-icon" title="Ativar/Desativar som do jogo">
+              <span id="audio-icon">🔊</span>
+            </button>
+
+            <!-- Seletor de Formato -->
+            <select id="export-format-select" class="custom-select format-select" title="Formato de exportação do vídeo">
+              <option value="webm">WebM (60 FPS &bull; Sem tela preta)</option>
+              <option value="mp4">MP4 (H.264)</option>
+            </select>
+
+            <!-- Botão Principal de Exportação -->
+            <button id="btn-export-mp4" class="btn btn-export">
+              <span class="export-icon">💾</span>
+              <span id="btn-export-text">Baixar Clipe</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal de Progresso da Exportação -->
+    <div id="export-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <h3 id="export-modal-title">Exportando Clipe</h3>
+        <p id="export-status-text">Processando quadros a 60 FPS...</p>
+        
+        <div class="progress-bar-container">
+          <div id="export-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+        </div>
+        <span id="export-progress-pct" class="progress-pct-text">0%</span>
+
+        <div class="modal-actions">
+          <button id="btn-cancel-export" class="btn btn-secondary btn-sm">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Principal da Aplicação -->
+  <script type="module" src="src/app.js?v=nocache_3"></script>
+</body>
+</html>

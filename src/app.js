@@ -326,7 +326,7 @@ class HaxTapeApp {
     this.engine.isPlaying = false;
     this.dom.playIcon.textContent = "▶";
 
-    const format = this.dom.exportFormatSelect?.value || (ClipRecorder.isWebmPreferred() ? "webm" : "mp4");
+    const format = this.dom.exportFormatSelect?.value || "mp4";
     if (this.dom.exportModalTitle) {
       this.dom.exportModalTitle.textContent = `Exportando Clipe (${format.toUpperCase()})`;
     }

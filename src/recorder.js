@@ -466,11 +466,13 @@ export class ClipRecorder {
     const sampleRate = 44100;
 
     const candidateVideoCodecs = [
+      "avc1.64002a",
+      "avc1.64001f",
+      "avc1.4d002a",
+      "avc1.4d001f",
       "avc1.42002a",
       "avc1.42001f",
-      "avc1.42E01E",
-      "avc1.4d002a",
-      "avc1.4d001f"
+      "avc1.42E01E"
     ];
 
     let chosenVideoCodec = null;

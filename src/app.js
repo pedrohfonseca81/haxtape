@@ -3,11 +3,11 @@
  * Conecta UI, Engine, Renderizador, Áudio e Gravador MP4.
  */
 
-import { Hbr2Parser } from "./parser.js?v=nocache_3";
-import { AudioManager } from "./audio.js?v=nocache_3";
-import { ReplayEngine } from "./engine.js?v=nocache_3";
-import { VideoRenderer } from "./renderer.js?v=nocache_3";
-import { ClipRecorder } from "./recorder.js?v=nocache_3";
+import { Hbr2Parser } from "./parser.js?v=nocache_4";
+import { AudioManager } from "./audio.js?v=nocache_4";
+import { ReplayEngine } from "./engine.js?v=nocache_4";
+import { VideoRenderer } from "./renderer.js?v=nocache_4";
+import { ClipRecorder } from "./recorder.js?v=nocache_4";
 
 class HaxTapeApp {
   constructor() {
@@ -21,6 +21,10 @@ class HaxTapeApp {
     this.trimStartTick = 0;
     this.trimEndTick = 0;
     this.isDraggingHandle = null; // 'start' | 'end' | null
+
+    // Súmula: partidas cuja súmula já abriu automaticamente ao final
+    this.summaryShown = new Set();
+    this.summaryMatch = null;
 
     // Cache de elementos DOM
     this.dom = {
@@ -36,8 +40,18 @@ class HaxTapeApp {
       currentTimeText: document.getElementById("current-time"),
       totalTimeText: document.getElementById("total-time"),
       trimDurationText: document.getElementById("trim-duration-text"),
+      trimLengthText: document.getElementById("trim-length-text"),
       timelineBar: document.getElementById("timeline-bar"),
+      timelineTrack: document.getElementById("timeline-track"),
+      timelineDimLeft: document.getElementById("timeline-dim-left"),
+      timelineDimRight: document.getElementById("timeline-dim-right"),
       timelineRange: document.getElementById("timeline-range"),
+      timelineRangeLabel: document.getElementById("timeline-range-label"),
+      timelineHover: document.getElementById("timeline-hover"),
+      timelineHoverTime: document.getElementById("timeline-hover-time"),
+      timelineRuler: document.getElementById("timeline-ruler"),
+      handleStartTag: document.getElementById("handle-start-tag"),
+      handleEndTag: document.getElementById("handle-end-tag"),
       timelinePlayhead: document.getElementById("timeline-playhead"),
       timelineMarkers: document.getElementById("timeline-markers"),
       handleStart: document.getElementById("handle-start"),
@@ -58,7 +72,20 @@ class HaxTapeApp {
       panelScoreboard: document.getElementById("panel-scoreboard"),
       panelScoreRed: document.getElementById("panel-score-red"),
       panelScoreBlue: document.getElementById("panel-score-blue"),
-      panelMatchTime: document.getElementById("panel-match-time")
+      panelMatchTime: document.getElementById("panel-match-time"),
+      btnSummary: document.getElementById("btn-summary"),
+      summaryModal: document.getElementById("summary-modal"),
+      summaryMeta: document.getElementById("summary-meta"),
+      summaryScore: document.getElementById("summary-score"),
+      summaryResult: document.getElementById("summary-result"),
+      summaryGoals: document.getElementById("summary-goals"),
+      summaryStats: document.getElementById("summary-stats"),
+      summaryLineups: document.getElementById("summary-lineups"),
+      summaryMvp: document.getElementById("summary-mvp"),
+      btnSummaryClose: document.getElementById("btn-summary-close"),
+      btnSummaryOk: document.getElementById("btn-summary-ok"),
+      btnSummaryCopy: document.getElementById("btn-summary-copy"),
+      btnSummaryReplay: document.getElementById("btn-summary-replay")
     };
 
     this.lastFrameTime = performance.now();
@@ -140,8 +167,11 @@ class HaxTapeApp {
       this.dom.matchContainer.style.display = "none";
     }
 
-    // Cria os marcadores visuais de gol na timeline
-    this._renderTimelineMarkers(info.markers);
+    // Cria os marcadores visuais de gol, trechos de partida e régua na timeline
+    this.summaryShown.clear();
+    this._closeSummary();
+    this._renderTimelineMarkers(info.matches);
+    this._renderTimelineRuler();
 
     // Começa exatamente do início (tick 0)
     this.engine.seek(0);
@@ -192,6 +222,18 @@ class HaxTapeApp {
             lastFrame = frame;
           }
           this.accumulatedTime -= tickDurationMs;
+
+          // Fim de partida: pausa e mostra a súmula (uma vez por partida)
+          const ended = this.engine.matches.find(
+            (m) => m.endTick === this.engine.currentTick && !this.summaryShown.has(m.index)
+          );
+          if (ended) {
+            this.summaryShown.add(ended.index);
+            this.accumulatedTime = 0;
+            this._setPlaying(false);
+            this.openSummary(ended);
+            break;
+          }
         }
 
         // Renderiza apenas uma vez por frame de tela para máxima fluidez a 60 FPS
@@ -207,11 +249,15 @@ class HaxTapeApp {
     requestAnimationFrame(loop);
   }
 
+  _setPlaying(playing) {
+    this.engine.isPlaying = playing;
+    this.dom.playIcon.textContent = playing ? "❚❚" : "▶";
+  }
+
   togglePlayPause() {
     if (!this.engine.replay) return;
 
-    this.engine.isPlaying = !this.engine.isPlaying;
-    this.dom.playIcon.textContent = this.engine.isPlaying ? "❚❚" : "▶";
+    this._setPlaying(!this.engine.isPlaying);
 
     // Mostra indicador rápido no centro do canvas
     this.dom.playIndicator.textContent = this.engine.isPlaying ? "▶" : "❚❚";
@@ -228,26 +274,56 @@ class HaxTapeApp {
      Timeline e Corte Interativo
      ======================================================================== */
 
-  _renderTimelineMarkers(markers) {
+  _renderTimelineMarkers(matches) {
     this.dom.timelineMarkers.innerHTML = "";
-    if (!markers || markers.length === 0 || this.engine.durationTicks === 0) return;
+    this.dom.timelineTrack.innerHTML = "";
+    const total = this.engine.durationTicks;
+    if (!total) return;
 
-    markers.forEach((m) => {
-      const pct = (m.tick / this.engine.durationTicks) * 100;
-      const markerEl = document.createElement("div");
-      markerEl.className = `goal-marker ${m.kind === 1 ? "red" : "blue"}`;
-      markerEl.style.left = `${pct}%`;
-      const mins = Math.floor(m.timeSec / 60);
-      const secs = Math.floor(m.timeSec % 60);
-      markerEl.title = `Gol aos ${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")} — Clique para clipar (-5s a +3s)`;
+    for (const match of matches || []) {
+      // Trecho com bola rolando destacado no fundo da barra
+      const seg = document.createElement("div");
+      seg.className = "match-segment";
+      seg.style.left = `${(match.startTick / total) * 100}%`;
+      seg.style.width = `${((match.endTick - match.startTick) / total) * 100}%`;
+      this.dom.timelineTrack.appendChild(seg);
 
-      markerEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this._snapClipAroundGoal(m.tick);
-      });
+      for (const goal of match.goals) {
+        const markerEl = document.createElement("div");
+        markerEl.className = `goal-marker ${goal.team === "Red" ? "red" : "blue"}`;
+        markerEl.style.left = `${(goal.tick / total) * 100}%`;
+        const who = goal.scorer ? ` — ${goal.scorer}${goal.ownGoal ? " (contra)" : ""}` : "";
+        markerEl.title = `Gol ${goal.team} aos ${formatClock(goal.gameTime)}${who}\nClique para clipar (-5s a +3s)`;
 
-      this.dom.timelineMarkers.appendChild(markerEl);
-    });
+        markerEl.addEventListener("mousedown", (e) => e.stopPropagation());
+        markerEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._snapClipAroundGoal(goal.tick);
+        });
+
+        this.dom.timelineMarkers.appendChild(markerEl);
+      }
+    }
+  }
+
+  _renderTimelineRuler() {
+    const ruler = this.dom.timelineRuler;
+    ruler.innerHTML = "";
+    const totalSec = this.engine.durationTicks / 60;
+    if (!totalSec) return;
+
+    // Escolhe um passo que deixe ~1 rótulo a cada 90px
+    const maxLabels = Math.max(2, Math.floor(ruler.clientWidth / 90));
+    const steps = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800];
+    const step = steps.find((s) => totalSec / s <= maxLabels) || 3600;
+
+    for (let t = 0; t < totalSec - step * 0.4; t += step) {
+      const label = document.createElement("span");
+      label.className = "ruler-label";
+      label.style.left = `${(t / totalSec) * 100}%`;
+      label.textContent = formatClock(t);
+      ruler.appendChild(label);
+    }
   }
 
   _snapClipAroundGoal(goalTick) {
@@ -263,9 +339,10 @@ class HaxTapeApp {
   _updateTimelineUI() {
     if (!this.engine.durationTicks) return;
 
-    const currentPct = (this.engine.currentTick / this.engine.durationTicks) * 100;
-    const startPct = (this.trimStartTick / this.engine.durationTicks) * 100;
-    const endPct = (this.trimEndTick / this.engine.durationTicks) * 100;
+    const total = this.engine.durationTicks;
+    const currentPct = (this.engine.currentTick / total) * 100;
+    const startPct = (this.trimStartTick / total) * 100;
+    const endPct = (this.trimEndTick / total) * 100;
 
     this.dom.timelinePlayhead.style.left = `${currentPct}%`;
     this.dom.handleStart.style.left = `${startPct}%`;
@@ -273,23 +350,34 @@ class HaxTapeApp {
 
     this.dom.timelineRange.style.left = `${startPct}%`;
     this.dom.timelineRange.style.width = `${Math.max(0, endPct - startPct)}%`;
+    this.dom.timelineDimLeft.style.width = `${startPct}%`;
+    this.dom.timelineDimRight.style.width = `${Math.max(0, 100 - endPct)}%`;
 
     // Atualiza texto de duração do corte
     const startSec = this.trimStartTick / 60;
     const endSec = this.trimEndTick / 60;
     const durSec = (this.trimEndTick - this.trimStartTick) / 60;
 
-    const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-    this.dom.trimDurationText.textContent = `${fmt(startSec)} - ${fmt(endSec)} (${durSec.toFixed(1)}s)`;
+    this.dom.trimDurationText.textContent = `${formatClock(startSec)} → ${formatClock(endSec)}`;
+    this.dom.trimLengthText.textContent = `${durSec.toFixed(1)}s`;
+    this.dom.handleStartTag.textContent = formatClock(startSec);
+    this.dom.handleEndTag.textContent = formatClock(endSec);
+
+    // Enquanto o corte cobre o replay inteiro, a faixa ensina como cortar
+    const isFull = this.trimStartTick === 0 && this.trimEndTick === total;
+    const label = this.dom.timelineRangeLabel;
+    label.classList.toggle("is-hint", isFull);
+    label.textContent = isFull
+      ? "Arraste as alças amarelas para recortar o clipe"
+      : `✂ ${durSec.toFixed(1)}s`;
   }
 
   _updateTimeText() {
     const curSec = this.engine.currentTick / 60;
     const totSec = this.engine.durationTicks / 60;
-    const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-    this.dom.currentTimeText.textContent = fmt(curSec);
-    this.dom.totalTimeText.textContent = fmt(totSec);
+    this.dom.currentTimeText.textContent = formatClock(curSec);
+    this.dom.totalTimeText.textContent = formatClock(totSec);
 
     this._updateScoreboardUI();
   }
@@ -323,8 +411,7 @@ class HaxTapeApp {
   async startExport(options = {}) {
     if (!this.engine.replay) return;
 
-    this.engine.isPlaying = false;
-    this.dom.playIcon.textContent = "▶";
+    this._setPlaying(false);
 
     const format = this.dom.exportFormatSelect?.value || "mp4";
     if (this.dom.exportModalTitle) {
@@ -475,21 +562,52 @@ class HaxTapeApp {
       }
     });
 
+    // Súmula da Partida
+    this.dom.btnSummary.addEventListener("click", () => this.openSummary());
+    this.dom.btnSummaryClose.addEventListener("click", () => this._closeSummary());
+    this.dom.btnSummaryOk.addEventListener("click", () => this._closeSummary());
+    this.dom.btnSummaryCopy.addEventListener("click", () => this._copySummary());
+    this.dom.btnSummaryReplay.addEventListener("click", () => {
+      const match = this.summaryMatch;
+      this._closeSummary();
+      if (!match) return;
+      this.trimStartTick = match.startTick;
+      this.trimEndTick = match.endTick;
+      this._seekAndRender(match.startTick);
+      this._setPlaying(true);
+    });
+    this.dom.summaryModal.addEventListener("click", (e) => {
+      if (e.target === this.dom.summaryModal) this._closeSummary();
+    });
+
     // Exportar MP4
     this.dom.btnExportMp4.addEventListener("click", (e) => this.startExport({ forceMediaRecorder: e.shiftKey }));
     this.dom.btnCancelExport.addEventListener("click", () => this.recorder.cancel());
 
     // Interações com a Timeline (Clique e Arraste das alças)
     this.dom.timelineBar.addEventListener("mousedown", (e) => {
-      if (e.target === this.dom.handleStart) {
-        this.isDraggingHandle = "start";
-      } else if (e.target === this.dom.handleEnd) {
-        this.isDraggingHandle = "end";
+      const handle = e.target.closest(".trim-handle");
+      if (handle) {
+        e.preventDefault();
+        this.isDraggingHandle = handle === this.dom.handleStart ? "start" : "end";
+        handle.classList.add("dragging");
+        document.body.style.cursor = "ew-resize";
       } else {
         // Clique direto na timeline para buscar (seek)
         this._handleTimelineClick(e);
       }
     });
+
+    // Prévia do tempo sob o cursor
+    this.dom.timelineBar.addEventListener("mousemove", (e) => {
+      if (!this.engine.durationTicks) return;
+      const rect = this.dom.timelineBar.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      this.dom.timelineHover.style.left = `${x}px`;
+      this.dom.timelineHoverTime.textContent = formatClock((x / rect.width) * (this.engine.durationTicks / 60));
+    });
+
+    window.addEventListener("resize", () => this._renderTimelineRuler());
 
     window.addEventListener("mousemove", (e) => {
       if (!this.isDraggingHandle || !this.engine.durationTicks) return;
@@ -517,6 +635,9 @@ class HaxTapeApp {
           this.renderer.renderFrame(frame);
         }
         this.isDraggingHandle = null;
+        this.dom.handleStart.classList.remove("dragging");
+        this.dom.handleEnd.classList.remove("dragging");
+        document.body.style.cursor = "";
       }
     });
 
@@ -525,7 +646,20 @@ class HaxTapeApp {
       // Ignora se estiver digitando em campos de input
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
 
+      if (this._isSummaryOpen()) {
+        if (e.code === "Escape" || e.code === "KeyS") {
+          e.preventDefault();
+          this._closeSummary();
+        }
+        return;
+      }
+
       switch (e.code) {
+        case "KeyS":
+          e.preventDefault();
+          this.openSummary();
+          break;
+
         case "Space":
           e.preventDefault();
           this.togglePlayPause();
@@ -568,6 +702,133 @@ class HaxTapeApp {
     });
   }
 
+  _seekAndRender(tick) {
+    this.engine.seek(tick);
+    if (this.engine.replay) {
+      this.renderer.renderFrame(this.engine.replay.T.sc());
+    }
+    this._updateTimelineUI();
+    this._updateTimeText();
+  }
+
+  /* ========================================================================
+     Súmula da Partida
+     ======================================================================== */
+
+  /** Partida em andamento no tick atual, ou a última encerrada antes dele */
+  _matchAtCurrentTick() {
+    const tick = this.engine.currentTick;
+    const matches = this.engine.matches;
+    return (
+      matches.find((m) => tick >= m.startTick && tick <= m.endTick) ||
+      [...matches].reverse().find((m) => m.endTick <= tick) ||
+      matches[0]
+    );
+  }
+
+  _isSummaryOpen() {
+    return this.dom.summaryModal.style.display !== "none";
+  }
+
+  _closeSummary() {
+    this.dom.summaryModal.style.display = "none";
+  }
+
+  openSummary(match = this._matchAtCurrentTick()) {
+    if (!match) return;
+    this.summaryMatch = match;
+    const s = buildSummary(match);
+    const multi = this.engine.matches.length > 1;
+
+    this.dom.summaryMeta.textContent = [
+      multi ? `Jogo ${match.index + 1}` : null,
+      match.stadium || null,
+      `⏱ ${formatClock(match.gameTime)}`,
+      match.finished ? "Encerrada" : "Interrompida"
+    ].filter(Boolean).join(" · ");
+
+    const winner = s.red > s.blue ? "Red" : s.blue > s.red ? "Blue" : null;
+    this.dom.summaryScore.innerHTML = `
+      <div class="summary-team red ${winner === "Red" ? "winner" : ""}">RED <span class="team-dot"></span></div>
+      <div class="summary-goals-big">${s.red}<span class="x">×</span>${s.blue}</div>
+      <div class="summary-team blue ${winner === "Blue" ? "winner" : ""}"><span class="team-dot"></span> BLUE</div>`;
+    this.dom.summaryResult.textContent = winner ? `Vitória do ${winner}` : "Empate";
+
+    // Gols
+    const goalsEl = this.dom.summaryGoals;
+    goalsEl.innerHTML = "";
+    if (match.goals.length === 0) {
+      goalsEl.innerHTML = `<li class="summary-empty">Nenhum gol na partida.</li>`;
+    }
+    for (const goal of match.goals) {
+      const li = document.createElement("li");
+      li.className = `summary-goal ${goal.team === "Red" ? "red" : "blue"}`;
+      li.innerHTML = `
+        <time>${formatClock(goal.gameTime)}</time>
+        <span class="goal-partial">${goal.scoreRed}-${goal.scoreBlue}</span>
+        <span class="goal-who">
+          <strong>${escapeHtml(goal.scorer || "Desconhecido")}</strong>${goal.ownGoal ? `<span class="goal-own">contra</span>` : ""}
+          ${goal.assist ? `<small>assist. ${escapeHtml(goal.assist)}</small>` : ""}
+        </span>
+        <button class="btn btn-secondary goal-watch" title="Clipar este gol (-5s a +3s)">▶ Ver</button>`;
+      li.querySelector("button").addEventListener("click", () => {
+        this._closeSummary();
+        this._snapClipAroundGoal(goal.tick);
+        this._setPlaying(true);
+      });
+      goalsEl.appendChild(li);
+    }
+
+    // Estatísticas comparativas
+    this.dom.summaryStats.innerHTML = s.stats
+      .map(({ label, red, blue, suffix = "" }) => {
+        const sum = red + blue;
+        const redPct = sum ? (red / sum) * 100 : 50;
+        return `
+          <div class="stat-row">
+            <div class="stat-row-head"><span>${red}${suffix}</span><span>${label}</span><span>${blue}${suffix}</span></div>
+            <div class="stat-bar"><span class="red" style="width:${redPct}%"></span><span class="blue" style="width:${100 - redPct}%"></span></div>
+          </div>`;
+      })
+      .join("");
+
+    // Escalações
+    const lineup = (team) => {
+      const players = s.players.filter((p) => p.team === team);
+      if (players.length === 0) return `<ul class="lineup-team ${team.toLowerCase()}"><li class="summary-empty">—</li></ul>`;
+      return `<ul class="lineup-team ${team.toLowerCase()}">${players
+        .map((p) => {
+          const badges = [
+            p.goals ? `<span title="Gols">⚽${p.goals}</span>` : "",
+            p.assists ? `<span title="Assistências">🤝${p.assists}</span>` : "",
+            p.ownGoals ? `<span title="Gols contra">🔻${p.ownGoals}</span>` : "",
+            `<span class="dim" title="Chutes">👟${p.kicks}</span>`
+          ].join("");
+          return `<li class="lineup-player"><span class="lineup-name">${escapeHtml(p.name)}</span><span class="lineup-badges">${badges}</span></li>`;
+        })
+        .join("")}</ul>`;
+    };
+    this.dom.summaryLineups.innerHTML = lineup("Red") + lineup("Blue");
+
+    this.dom.summaryMvp.innerHTML = s.mvp
+      ? `⭐ Craque da partida: <strong>${escapeHtml(s.mvp.name)}</strong> <span>(${s.mvp.team})</span>`
+      : "";
+
+    this.dom.summaryModal.style.display = "flex";
+  }
+
+  async _copySummary() {
+    if (!this.summaryMatch) return;
+    const text = summaryToText(buildSummary(this.summaryMatch), this.summaryMatch, this.engine.matches.length > 1);
+    try {
+      await navigator.clipboard.writeText(text);
+      this.dom.btnSummaryCopy.textContent = "✓ Copiada!";
+    } catch {
+      this.dom.btnSummaryCopy.textContent = "Falha ao copiar";
+    }
+    setTimeout(() => (this.dom.btnSummaryCopy.textContent = "📋 Copiar súmula"), 1600);
+  }
+
   _handleTimelineClick(e) {
     if (!this.engine.durationTicks) return;
     const rect = this.dom.timelineBar.getBoundingClientRect();
@@ -582,6 +843,67 @@ class HaxTapeApp {
     this._updateTimelineUI();
     this._updateTimeText();
   }
+}
+
+/* ==========================================================================
+   Utilitários
+   ========================================================================== */
+
+function formatClock(totalSec) {
+  const s = Math.max(0, Math.floor(totalSec));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+/** Consolida os dados da partida no formato exibido pela súmula */
+function buildSummary(match) {
+  const { Red, Blue } = match.stats;
+  const possTotal = Red.possessionTicks + Blue.possessionTicks;
+  const possRed = possTotal ? Math.round((Red.possessionTicks / possTotal) * 100) : 50;
+
+  const players = [...match.players].sort(
+    (a, b) => b.goals - a.goals || b.assists - a.assists || b.kicks - a.kicks
+  );
+
+  // Craque: gols e assistências pesam mais; passes e chutes desempatam
+  const rating = (p) => p.goals * 3 + p.assists * 2 - p.ownGoals * 2 + p.passes * 0.1 + p.kicks * 0.05;
+  const mvp = players.length ? players.reduce((best, p) => (rating(p) > rating(best) ? p : best)) : null;
+
+  return {
+    red: match.scoreRed,
+    blue: match.scoreBlue,
+    players,
+    mvp: mvp && rating(mvp) > 0 ? mvp : null,
+    stats: [
+      { label: "Posse de bola", red: possRed, blue: 100 - possRed, suffix: "%" },
+      { label: "Chutes", red: Red.kicks, blue: Blue.kicks },
+      { label: "Passes", red: Red.passes, blue: Blue.passes }
+    ]
+  };
+}
+
+/** Versão em texto da súmula, pronta para colar no Discord/WhatsApp */
+function summaryToText(s, match, multi) {
+  const lines = [];
+  const title = ["📋 SÚMULA", multi ? `Jogo ${match.index + 1}` : null, match.stadium || null].filter(Boolean).join(" — ");
+  lines.push(title);
+  lines.push(`🔴 RED ${s.red} x ${s.blue} BLUE 🔵  ·  ⏱ ${formatClock(match.gameTime)}`);
+  lines.push("");
+  if (match.goals.length) {
+    lines.push("⚽ Gols");
+    for (const g of match.goals) {
+      const dot = g.team === "Red" ? "🔴" : "🔵";
+      const who = (g.scorer || "Desconhecido") + (g.ownGoal ? " (contra)" : "");
+      lines.push(`${formatClock(g.gameTime)} ${dot} ${who}${g.assist ? ` (assist. ${g.assist})` : ""}`);
+    }
+    lines.push("");
+  }
+  lines.push("📊 " + s.stats.map((st) => `${st.label} ${st.red}${st.suffix || ""} x ${st.blue}${st.suffix || ""}`).join(" · "));
+  if (s.mvp) lines.push(`⭐ Craque: ${s.mvp.name} (${s.mvp.team})`);
+  return lines.join("\n");
 }
 
 // Inicializa a aplicação ao carregar a página

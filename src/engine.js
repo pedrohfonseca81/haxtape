@@ -109,14 +109,15 @@ export class ReplayEngine {
         self.audio.playGoal();
       }
       if (self.onGoal) {
-        self.onGoal(team, self.currentTick);
+        self.onGoal(team && team.$ === 1 ? "Red" : "Blue", self.currentTick);
       }
       if (oldNi) oldNi.apply(this, arguments);
     };
   }
 
   /**
-   * Pre-indexa o replay inteiro em memória para mapear todos os eventos e partidas
+   * Pre-indexa o replay inteiro em memória para mapear todos os eventos e partidas,
+   * coletando as estatísticas da súmula (autores dos gols, assistências, posse, chutes, passes).
    */
   _preIndexReplay() {
     const sim = new this.core.Replay(this.rawBytes, new this.core.Settings(), 3);
@@ -124,20 +125,78 @@ export class ReplayEngine {
 
     let currentMatch = null;
     let matchIdx = 0;
+    // Cadeia de toques na bola: último jogador a tocar e o anterior (para assistência)
+    let lastTouch = null;
+    let prevTouch = null;
 
-    sim.T.ji = () => {
+    const teamName = (team) => (team && team.$ === 1 ? "Red" : team && team.$ === 2 ? "Blue" : null);
+
+    const playerStats = (p) => {
+      let st = currentMatch.players.get(p.V);
+      if (!st) {
+        st = { id: p.V, name: p.w || "Player", team: null, goals: 0, assists: 0, ownGoals: 0, kicks: 0, touches: 0, passes: 0 };
+        currentMatch.players.set(p.V, st);
+      }
+      st.team = teamName(p.ea) || st.team;
+      return st;
+    };
+
+    const registerTouch = (p) => {
+      const team = teamName(p.ea);
+      if (!team) return;
+      const st = playerStats(p);
+      if (lastTouch && lastTouch.id === p.V) return;
+      st.touches++;
+      if (lastTouch && lastTouch.team === team) {
+        currentMatch.players.get(lastTouch.id).passes++;
+        currentMatch.stats[team].passes++;
+      }
+      prevTouch = lastTouch;
+      lastTouch = { id: p.V, name: st.name, team };
+    };
+
+    sim.T.ji = (p) => {
       this.soundEvents.push({ tick: sim.Y, type: "kick" });
+      if (!currentMatch || !p) return;
+      const team = teamName(p.ea);
+      if (!team) return;
+      playerStats(p).kicks++;
+      currentMatch.stats[team].kicks++;
+      registerTouch(p);
     };
 
     sim.T.Ni = (team) => {
       this.soundEvents.push({ tick: sim.Y, type: "goal" });
-      if (currentMatch) {
-        currentMatch.goals.push({
-          tick: sim.Y,
-          timeSec: sim.Y / 60,
-          team: team === 1 ? "Red" : "Blue"
-        });
+      if (!currentMatch) return;
+      const scoringTeam = teamName(team) || "Red";
+      const game = sim.T.K;
+      const goal = {
+        tick: sim.Y,
+        timeSec: sim.Y / 60,
+        gameTime: game ? game.Hc : 0,
+        team: scoringTeam,
+        scorer: null,
+        ownGoal: false,
+        assist: null,
+        scoreRed: game ? game.Pb : 0,
+        scoreBlue: game ? game.Kb : 0
+      };
+      if (lastTouch) {
+        goal.scorer = lastTouch.name;
+        goal.ownGoal = lastTouch.team !== scoringTeam;
+        const st = currentMatch.players.get(lastTouch.id);
+        if (goal.ownGoal) {
+          st.ownGoals++;
+        } else {
+          st.goals++;
+          if (prevTouch && prevTouch.team === scoringTeam && prevTouch.id !== lastTouch.id) {
+            goal.assist = prevTouch.name;
+            currentMatch.players.get(prevTouch.id).assists++;
+          }
+        }
       }
+      currentMatch.goals.push(goal);
+      lastTouch = prevTouch = null;
     };
 
     for (let t = 0; t < totalTicks; t++) {
@@ -146,24 +205,43 @@ export class ReplayEngine {
         sim.Dl();
       }
 
-      if (sim.T.K && !currentMatch) {
-        currentMatch = {
-          index: matchIdx++,
-          startTick: sim.Y,
-          endTick: totalTicks,
-          scoreRed: 0,
-          scoreBlue: 0,
-          goals: []
-        };
+      const game = sim.T.K;
+
+      if (game && !currentMatch) {
+        currentMatch = this._createMatch(matchIdx++, sim.Y, totalTicks);
+        currentMatch.stadium = game.S ? game.S.w : "";
         this.matches.push(currentMatch);
-      } else if (!sim.T.K && currentMatch) {
+        lastTouch = prevTouch = null;
+      } else if (!game && currentMatch) {
         currentMatch.endTick = sim.Y;
         currentMatch = null;
       }
 
-      if (currentMatch && sim.T.K) {
-        currentMatch.scoreRed = sim.T.K.Pb;
-        currentMatch.scoreBlue = sim.T.K.Kb;
+      if (currentMatch && game) {
+        currentMatch.scoreRed = game.Pb;
+        currentMatch.scoreBlue = game.Kb;
+        currentMatch.gameTime = game.Hc;
+        if (game.Bb === 3) currentMatch.finished = true;
+        if (game.Bb === 0) lastTouch = prevTouch = null;
+
+        // Toques por contato físico com a bola (kickoff e bola rolando)
+        const ball = game.ta && game.ta.F ? game.ta.F[0] : null;
+        if (ball && game.Bb <= 1) {
+          for (const p of sim.T.I || []) {
+            if (!p.H) continue;
+            const team = teamName(p.ea);
+            if (!team) continue;
+            playerStats(p);
+            const dx = p.H.a.x - ball.a.x;
+            const dy = p.H.a.y - ball.a.y;
+            const reach = p.H.Z + ball.Z + 0.1;
+            if (dx * dx + dy * dy <= reach * reach) registerTouch(p);
+          }
+        }
+
+        if (game.Bb === 1 && lastTouch) {
+          currentMatch.stats[lastTouch.team].possessionTicks++;
+        }
       }
 
       sim.Y++;
@@ -171,15 +249,32 @@ export class ReplayEngine {
     }
 
     if (this.matches.length === 0) {
-      this.matches.push({
-        index: 0,
-        startTick: 0,
-        endTick: totalTicks,
-        scoreRed: 0,
-        scoreBlue: 0,
-        goals: []
-      });
+      this.matches.push(this._createMatch(0, 0, totalTicks));
     }
+
+    // Converte o mapa de jogadores em lista simples para a UI
+    for (const m of this.matches) {
+      m.players = [...m.players.values()].filter((p) => p.team);
+    }
+  }
+
+  _createMatch(index, startTick, endTick) {
+    return {
+      index,
+      startTick,
+      endTick,
+      stadium: "",
+      scoreRed: 0,
+      scoreBlue: 0,
+      gameTime: 0,
+      finished: false,
+      goals: [],
+      players: new Map(),
+      stats: {
+        Red: { kicks: 0, passes: 0, possessionTicks: 0 },
+        Blue: { kicks: 0, passes: 0, possessionTicks: 0 }
+      }
+    };
   }
 
   /**

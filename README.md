@@ -11,7 +11,7 @@
 - **100% Client-Side & Sem Build:** Desenvolvido em Vanilla JS puro com ES Modules nativos. Não precisa de `npm install`, webpack, vite ou qualquer infraestrutura de backend. Seus replays nunca saem da sua máquina.
 - **Simulação Determinística Oficial:** Executa a engine física do HaxBall frame a frame a 60 FPS, garantindo zero desync, colisões fiéis, curvas e física de chute idêntica à do jogo.
 - **Linha do Tempo e Corte Preciso:**
-  - Alças interativas de início `[ Início` e fim `Fim ]`.
+  - Timeline no estilo de editor de vídeo: moldura amarela com alças arrastáveis, área fora do corte escurecida, régua de tempo e prévia do tempo sob o cursor.
   - Atalhos de teclado no estilo de editores profissionais (<kbd>I</kbd> para entrada e <kbd>O</kbd> para saída).
   - Marcadores de gol automáticos na timeline com salto direto para o lance (-5s antes até +3s após o gol).
 - **Exportação Ultrarrápida (WebCodecs):**
@@ -19,6 +19,7 @@
   - **MP4:** Codec H.264 AVC + áudio AAC via `mp4-muxer` com fallback inteligente para `MediaRecorder`.
 - **Áudio do Jogo Sincronizado:** Efeitos sonoros reais (chute, trave, apito de gol) renderizados via Web Audio API diretamente dentro da faixa de áudio do arquivo de vídeo.
 - **Placar Integrado no Painel:** O placar da partida (Red x Blue) e o tempo de jogo são exibidos em tempo real na barra de ferramentas inferior, mantendo o campo e os jogadores totalmente limpos e desobstruídos no vídeo gravado.
+- **Súmula da Partida:** Ao fim de cada jogo o replay pausa e mostra a súmula: placar, gols com autor, assistência e gol contra (pelo último toque na bola), posse de bola, chutes, passes, escalações e craque da partida. Cada gol tem um botão para clipar o lance, e a súmula pode ser copiada como texto para Discord/WhatsApp.
 - **Detecção de Multi-Partidas:** Identifica automaticamente quando um único `.hbr2` contém mais de um jogo consecutivo, permitindo alternar de partida instantaneamente.
 
 ---
@@ -30,6 +31,7 @@
 | <kbd>Espaço</kbd> | Reproduzir / Pausar |
 | <kbd>I</kbd> | Marcar **Início** do corte na posição atual |
 | <kbd>O</kbd> | Marcar **Fim** do corte na posição atual |
+| <kbd>S</kbd> | Abrir / fechar a **Súmula** da partida |
 | <kbd>&larr;</kbd> / <kbd>&rarr;</kbd> | Recuar / Avançar 1 segundo |
 | <kbd>Shift</kbd> + <kbd>&larr;</kbd> / <kbd>&rarr;</kbd> | Recuar / Avançar 1 frame (ajuste fino) |
 

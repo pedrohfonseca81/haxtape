@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HAXTAPE</title>
-  <link rel="stylesheet" href="style.css?v=nocache_3">
+  <link rel="stylesheet" href="style.css?v=nocache_4">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -14,7 +14,7 @@
   <!-- Pako (Descompressão Deflate rápida) -->
   <script src="src/vendor/pako.min.js"></script>
   <!-- Núcleo Determinístico Oficial do HaxBall -->
-  <script src="src/haxball-core.js?v=nocache_3"></script>
+  <script src="src/haxball-core.js?v=nocache_4"></script>
 </head>
 <body>
   <!-- Input de arquivo invisível mas acessível para todos os labels -->
@@ -71,31 +71,46 @@
         <div class="timeline-container">
           <div class="timeline-header">
             <span class="trim-indicator">
-              Corte selecionado: <strong id="trim-duration-text">00:00 - 00:00 (0s)</strong>
+              <span class="trim-chip">✂ Clipe</span>
+              <strong id="trim-duration-text">00:00 → 00:00</strong>
+              <span class="trim-length" id="trim-length-text">0.0s</span>
             </span>
             <div class="timeline-shortcuts-hint">
-              Atalhos: <kbd>Espaço</kbd> Play/Pause &bull; <kbd>I</kbd> Início &bull; <kbd>O</kbd> Fim &bull; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Seek
+              Arraste as alças amarelas ou use <kbd>I</kbd> / <kbd>O</kbd> &bull; <kbd>Espaço</kbd> Play &bull; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Seek
             </div>
           </div>
 
           <div class="timeline-bar" id="timeline-bar">
-            <!-- Faixa do Replay Total -->
-            <div class="timeline-track"></div>
+            <!-- Faixa do Replay Total (partidas destacadas) -->
+            <div class="timeline-track" id="timeline-track"></div>
+            <!-- Áreas fora do corte (escurecidas) -->
+            <div class="timeline-dim dim-left" id="timeline-dim-left"></div>
+            <div class="timeline-dim dim-right" id="timeline-dim-right"></div>
             <!-- Faixa Selecionada para Corte -->
-            <div class="timeline-range" id="timeline-range"></div>
+            <div class="timeline-range" id="timeline-range">
+              <span class="range-label" id="timeline-range-label"></span>
+            </div>
             <!-- Marcadores de Gol na Timeline -->
             <div class="timeline-markers" id="timeline-markers"></div>
+            <!-- Prévia do tempo sob o mouse -->
+            <div class="timeline-hover" id="timeline-hover">
+              <span class="hover-time" id="timeline-hover-time">00:00</span>
+            </div>
             <!-- Agulha de Reprodução Atual (Playhead) -->
             <div class="timeline-playhead" id="timeline-playhead"></div>
             <!-- Alça de Início do Corte -->
-            <div class="trim-handle handle-start" id="handle-start" title="Início do corte (Pressione 'I')">
-              <span class="handle-tag">[ Início</span>
+            <div class="trim-handle handle-start" id="handle-start" title="Início do corte — arraste ou pressione I">
+              <span class="handle-grip"></span>
+              <span class="handle-tag" id="handle-start-tag">00:00</span>
             </div>
             <!-- Alça de Fim do Corte -->
-            <div class="trim-handle handle-end" id="handle-end" title="Fim do corte (Pressione 'O')">
-              <span class="handle-tag">Fim ]</span>
+            <div class="trim-handle handle-end" id="handle-end" title="Fim do corte — arraste ou pressione O">
+              <span class="handle-grip"></span>
+              <span class="handle-tag" id="handle-end-tag">00:00</span>
             </div>
           </div>
+          <!-- Régua de tempo -->
+          <div class="timeline-ruler" id="timeline-ruler"></div>
         </div>
 
         <!-- Controles Inferiores -->
@@ -144,6 +159,11 @@
           </div>
 
           <div class="controls-right">
+            <!-- Súmula da Partida -->
+            <button id="btn-summary" class="btn btn-secondary btn-sm" title="Ver súmula da partida (S)">
+              📋 Súmula
+            </button>
+
             <!-- Toggle de Efeitos Sonoros -->
             <button id="btn-toggle-audio" class="btn btn-icon" title="Ativar/Desativar som do jogo">
               <span id="audio-icon">🔊</span>
@@ -165,6 +185,46 @@
       </section>
     </main>
 
+    <!-- Súmula da Partida -->
+    <div id="summary-modal" class="modal-overlay" style="display: none;">
+      <div class="summary-card" role="dialog" aria-labelledby="summary-title">
+        <header class="summary-head">
+          <div>
+            <h3 id="summary-title">Súmula da Partida</h3>
+            <p class="summary-meta" id="summary-meta"></p>
+          </div>
+          <button id="btn-summary-close" class="btn btn-icon summary-close" title="Fechar (Esc)">✕</button>
+        </header>
+
+        <div class="summary-score" id="summary-score"></div>
+        <p class="summary-result" id="summary-result"></p>
+
+        <div class="summary-grid">
+          <section class="summary-section">
+            <h4>Gols</h4>
+            <ol class="summary-goals" id="summary-goals"></ol>
+          </section>
+          <section class="summary-section">
+            <h4>Estatísticas</h4>
+            <div class="summary-stats" id="summary-stats"></div>
+          </section>
+        </div>
+
+        <section class="summary-section">
+          <h4>Escalações</h4>
+          <div class="summary-lineups" id="summary-lineups"></div>
+        </section>
+
+        <div class="summary-mvp" id="summary-mvp"></div>
+
+        <footer class="summary-actions">
+          <button id="btn-summary-copy" class="btn btn-secondary btn-sm">📋 Copiar súmula</button>
+          <button id="btn-summary-replay" class="btn btn-secondary btn-sm">↺ Rever partida</button>
+          <button id="btn-summary-ok" class="btn btn-primary btn-sm">Fechar</button>
+        </footer>
+      </div>
+    </div>
+
     <!-- Modal de Progresso da Exportação -->
     <div id="export-modal" class="modal-overlay" style="display: none;">
       <div class="modal-card">
@@ -184,6 +244,6 @@
   </div>
 
   <!-- Script Principal da Aplicação -->
-  <script type="module" src="src/app.js?v=nocache_3"></script>
+  <script type="module" src="src/app.js?v=nocache_4"></script>
 </body>
 </html>

@@ -154,6 +154,7 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
+  white-space: nowrap;
 }
 
 .btn-sm {
@@ -440,13 +441,42 @@ body {
   color: var(--timeline-handle);
 }
 
-.timeline-shortcuts-hint kbd {
+.trim-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-ghost:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+}
+
+.btn-ghost kbd {
   background: var(--bg-main);
   border: 1px solid var(--border-color);
-  color: var(--text-main);
+  color: var(--timeline-handle);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  padding: 1px 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0 5px;
   border-radius: 4px;
 }
 
@@ -727,19 +757,23 @@ body {
    ========================================================================== */
 
 .controls-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
 }
 
 .controls-left,
-.controls-center,
 .controls-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.controls-right {
+  justify-content: flex-end;
 }
 
 .time-display {
@@ -754,28 +788,51 @@ body {
   color: var(--text-muted);
 }
 
-.speed-selector {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+#btn-speed {
+  min-width: 44px;
+  height: 30px;
 }
 
-.format-select {
-  font-size: 0.8rem;
-  font-weight: 500;
-  padding: 6px 10px;
-  background: var(--bg-card);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
+/* Botão de exportação com seletor de formato acoplado */
+.export-group {
+  display: flex;
+  align-items: stretch;
   border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+
+.export-group .btn-export {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  box-shadow: none;
+}
+
+.export-group .btn-export:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.export-format {
+  appearance: none;
+  background: #047857 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='white' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") no-repeat right 8px center;
+  color: #ffffff;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-family: var(--font-main);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 26px 0 10px;
   cursor: pointer;
   outline: none;
-  transition: all 0.15s ease;
 }
 
-.format-select:hover,
-.format-select:focus {
-  border-color: var(--accent-blue);
+.export-format:hover {
+  background-color: #065f46;
+}
+
+.export-format option {
+  background: var(--bg-card);
+  color: var(--text-main);
 }
 
 /* ==========================================================================
@@ -1206,16 +1263,20 @@ body {
 
 @media (max-width: 900px) {
   .controls-toolbar {
-    flex-wrap: wrap;
-    gap: 12px;
+    grid-template-columns: 1fr auto;
+    row-gap: 10px;
   }
-  .controls-center {
-    order: 3;
-    width: 100%;
-    justify-content: center;
+  .panel-scoreboard {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: center;
   }
-  .timeline-shortcuts-hint {
-    display: none;
+}
+
+@media (max-width: 560px) {
+  .trim-actions .btn-ghost {
+    font-size: 0;
+    gap: 0;
   }
 }
 

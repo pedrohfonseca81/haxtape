@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HAXTAPE</title>
-  <link rel="stylesheet" href="style.css?v=nocache_4">
+  <link rel="stylesheet" href="style.css?v=nocache_5">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -14,7 +14,7 @@
   <!-- Pako (Descompressão Deflate rápida) -->
   <script src="src/vendor/pako.min.js"></script>
   <!-- Núcleo Determinístico Oficial do HaxBall -->
-  <script src="src/haxball-core.js?v=nocache_4"></script>
+  <script src="src/haxball-core.js?v=nocache_5"></script>
 </head>
 <body>
   <!-- Input de arquivo invisível mas acessível para todos os labels -->
@@ -75,8 +75,14 @@
               <strong id="trim-duration-text">00:00 → 00:00</strong>
               <span class="trim-length" id="trim-length-text">0.0s</span>
             </span>
-            <div class="timeline-shortcuts-hint">
-              Arraste as alças amarelas ou use <kbd>I</kbd> / <kbd>O</kbd> &bull; <kbd>Espaço</kbd> Play &bull; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Seek
+            <!-- Marcar início/fim do corte na posição atual -->
+            <div class="trim-actions">
+              <button id="btn-set-in" class="btn-ghost" title="Marcar início do corte na posição atual">
+                <kbd>I</kbd> Marcar início
+              </button>
+              <button id="btn-set-out" class="btn-ghost" title="Marcar fim do corte na posição atual">
+                <kbd>O</kbd> Marcar fim
+              </button>
             </div>
           </div>
 
@@ -126,60 +132,42 @@
               <span id="current-time">00:00</span> / <span id="total-time">00:00</span>
             </div>
 
-            <!-- Velocidade de Reprodução -->
-            <div class="speed-selector">
-              <button class="btn-chip" data-speed="0.5">0.5x</button>
-              <button class="btn-chip active" data-speed="1.0">1x</button>
-              <button class="btn-chip" data-speed="2.0">2x</button>
-            </div>
+            <!-- Velocidade de Reprodução (clique alterna 0.5x → 1x → 2x) -->
+            <button id="btn-speed" class="btn-chip" title="Velocidade de reprodução">1x</button>
           </div>
 
-          <div class="controls-center">
-            <!-- Botões Rápidos de Marcação [ I ] e [ O ] -->
-            <button id="btn-set-in" class="btn btn-secondary btn-sm" title="Marcar Início no ponto atual (I)">
-              [ Início (I)
-            </button>
-
-            <!-- Placar da Partida no Painel -->
-            <div class="panel-scoreboard" id="panel-scoreboard" title="Placar da Partida">
-              <div class="scoreboard-team red">
-                <span class="scoreboard-score" id="panel-score-red">0</span>
-                <span class="scoreboard-name" id="panel-name-red">RED</span>
-              </div>
-              <div class="scoreboard-time" id="panel-match-time">00:00</div>
-              <div class="scoreboard-team blue">
-                <span class="scoreboard-name" id="panel-name-blue">BLUE</span>
-                <span class="scoreboard-score" id="panel-score-blue">0</span>
-              </div>
+          <!-- Placar da Partida no Painel -->
+          <div class="panel-scoreboard" id="panel-scoreboard" title="Placar da Partida">
+            <div class="scoreboard-team red">
+              <span class="scoreboard-score" id="panel-score-red">0</span>
+              <span class="scoreboard-name" id="panel-name-red">RED</span>
             </div>
-
-            <button id="btn-set-out" class="btn btn-secondary btn-sm" title="Marcar Fim no ponto atual (O)">
-              Fim (O) ]
-            </button>
+            <div class="scoreboard-time" id="panel-match-time">00:00</div>
+            <div class="scoreboard-team blue">
+              <span class="scoreboard-name" id="panel-name-blue">BLUE</span>
+              <span class="scoreboard-score" id="panel-score-blue">0</span>
+            </div>
           </div>
 
           <div class="controls-right">
             <!-- Súmula da Partida -->
-            <button id="btn-summary" class="btn btn-secondary btn-sm" title="Ver súmula da partida (S)">
-              📋 Súmula
-            </button>
+            <button id="btn-summary" class="btn btn-icon" title="Súmula da partida (S)">📋</button>
 
             <!-- Toggle de Efeitos Sonoros -->
             <button id="btn-toggle-audio" class="btn btn-icon" title="Ativar/Desativar som do jogo">
               <span id="audio-icon">🔊</span>
             </button>
 
-            <!-- Seletor de Formato -->
-            <select id="export-format-select" class="custom-select format-select" title="Formato de exportação do vídeo">
-              <option value="mp4" selected>MP4 (H.264 &bull; Universal)</option>
-              <option value="webm">WebM (VP9 &bull; 60 FPS)</option>
-            </select>
-
-            <!-- Botão Principal de Exportação -->
-            <button id="btn-export-mp4" class="btn btn-export">
-              <span class="export-icon">💾</span>
-              <span id="btn-export-text">Baixar Clipe</span>
-            </button>
+            <!-- Exportação: botão principal + formato acoplado -->
+            <div class="export-group">
+              <button id="btn-export-mp4" class="btn btn-export" title="Baixar o trecho selecionado (Shift+clique força MediaRecorder)">
+                ⬇ Baixar clipe
+              </button>
+              <select id="export-format-select" class="export-format" title="Formato do vídeo">
+                <option value="mp4" selected>MP4</option>
+                <option value="webm">WebM</option>
+              </select>
+            </div>
           </div>
         </div>
       </section>
@@ -244,6 +232,6 @@
   </div>
 
   <!-- Script Principal da Aplicação -->
-  <script type="module" src="src/app.js?v=nocache_4"></script>
+  <script type="module" src="src/app.js?v=nocache_5"></script>
 </body>
 </html>

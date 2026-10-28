@@ -3,11 +3,11 @@
  * Conecta UI, Engine, Renderizador, Áudio e Gravador MP4.
  */
 
-import { Hbr2Parser } from "./parser.js?v=nocache_4";
-import { AudioManager } from "./audio.js?v=nocache_4";
-import { ReplayEngine } from "./engine.js?v=nocache_4";
-import { VideoRenderer } from "./renderer.js?v=nocache_4";
-import { ClipRecorder } from "./recorder.js?v=nocache_4";
+import { Hbr2Parser } from "./parser.js?v=nocache_5";
+import { AudioManager } from "./audio.js?v=nocache_5";
+import { ReplayEngine } from "./engine.js?v=nocache_5";
+import { VideoRenderer } from "./renderer.js?v=nocache_5";
+import { ClipRecorder } from "./recorder.js?v=nocache_5";
 
 class HaxTapeApp {
   constructor() {
@@ -62,7 +62,7 @@ class HaxTapeApp {
       audioIcon: document.getElementById("audio-icon"),
       exportFormatSelect: document.getElementById("export-format-select"),
       btnExportMp4: document.getElementById("btn-export-mp4"),
-      btnExportText: document.getElementById("btn-export-text"),
+      btnSpeed: document.getElementById("btn-speed"),
       exportModal: document.getElementById("export-modal"),
       exportModalTitle: document.getElementById("export-modal-title"),
       exportStatusText: document.getElementById("export-status-text"),
@@ -102,14 +102,6 @@ class HaxTapeApp {
     if (this.dom.exportFormatSelect) {
       const preferWebm = ClipRecorder.isWebmPreferred();
       this.dom.exportFormatSelect.value = preferWebm ? "webm" : "mp4";
-      this._updateExportButtonText();
-    }
-  }
-
-  _updateExportButtonText() {
-    const fmt = this.dom.exportFormatSelect?.value || "webm";
-    if (this.dom.btnExportText) {
-      this.dom.btnExportText.textContent = `Baixar Clipe (.${fmt})`;
     }
   }
 
@@ -515,12 +507,12 @@ class HaxTapeApp {
     this.canvas.addEventListener("click", () => this.togglePlayPause());
 
     // Velocidade de reprodução
-    document.querySelectorAll(".speed-selector .btn-chip").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".speed-selector .btn-chip").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        this.engine.playbackSpeed = parseFloat(btn.dataset.speed);
-      });
+    this.dom.btnSpeed.addEventListener("click", () => {
+      const speeds = [0.5, 1, 2];
+      const next = speeds[(speeds.indexOf(this.engine.playbackSpeed) + 1) % speeds.length] ?? 1;
+      this.engine.playbackSpeed = next;
+      this.dom.btnSpeed.textContent = `${next}x`;
+      this.dom.btnSpeed.classList.toggle("active", next !== 1);
     });
 
     // Marcar Início / Fim [ I ] e [ O ]
@@ -539,13 +531,6 @@ class HaxTapeApp {
       this.audio.muted = !this.audio.muted;
       this.dom.audioIcon.textContent = this.audio.muted ? "🔇" : "🔊";
     });
-
-    // Seletor de Formato (WebM / MP4)
-    if (this.dom.exportFormatSelect) {
-      this.dom.exportFormatSelect.addEventListener("change", () => {
-        this._updateExportButtonText();
-      });
-    }
 
     // Troca de partida no seletor de multi-partidas
     this.dom.matchSelect.addEventListener("change", (e) => {
